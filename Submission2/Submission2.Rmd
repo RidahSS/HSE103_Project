@@ -8,6 +8,11 @@ output:
 ---
 
 RESOURCES:
+1. https://dplyr.tidyverse.org/reference/relocate.html
+2. https://www.r-bloggers.com/2023/08/r-how-to-overlay-points-over-boxplots/
+3. https://bookdown.org/dli/rguide/scatterplots-and-best-fit-lines-single-set.html
+4. https://ggplot2.tidyverse.org/reference/lims.html 
+5. Utilizied AI for brainstorming and better understanding the concepts.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -16,7 +21,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ``` {r message = F, warning = F}
 # Load packages
-library(tidyverse) # note: tidyverse includes ggplot2
+library(tidyverse) # tidyverse includes ggplot2
 
 # STEP 1: Loading the data
 
@@ -159,7 +164,7 @@ selectedGeneExprLong <- selectedGeneExprLong %>%
   left_join(covar, by = "geoID")
 
 # Viewing the combined dataset
-head(selectedGeneExprLong) # Looks good!
+# head(selectedGeneExprLong) # Looks good!
 ```
 
 Now, we will reshape the data so that each gene has its own expression column.
@@ -172,7 +177,7 @@ selectedGeneExprWide <- selectedGeneExprLong %>%
               values_from = Expression) 
 
 # Viewing the now wide dataset
-head(selectedGeneExprWide) # looks good! gene expression data is added to the end
+# head(selectedGeneExprWide) # looks good! gene expression data is added to the end
 # so last three columns have the gene expression data. [also we have 13 columns 
 # which is as expected since covar had 10 columns and then we added 3 columns for 
 # our 3 genes so 13 makes sense]
@@ -236,8 +241,18 @@ cleanGenesData <- cleanGenesData %>%
     mat_asthma = gsub("asthma_0=healthy_1=asthmatic: ", "", mat_asthma),
     mat_asthma = ifelse(mat_asthma=="0", "Healthy", "Asthmatic"))
 
+# Creating vitamin D groups using 20 ng/mL as the cutoff.
+# I selected this cutoff after researching commonly used reference thresholds.
+# Reference: https://www.ncbi.nlm.nih.gov/books/NBK532266/
+cleanGenesData <- cleanGenesData %>% 
+  mutate(mat_vitD_group = factor(ifelse(mat_vitD < 20, 
+                                        "Below 20 ng/mL", 
+                                        "20 ng/mL or above"),
+                                 levels = c("Below 20 ng/mL", 
+                                            "20 ng/mL or above")))
+
 # Taking a look at our data to see if it looks good. 
-head(cleanGenesData) # RESULT: Looks good! Much neater and cleaner.
+# head(cleanGenesData) # RESULT: Looks good! Much neater and cleaner.
 ```
 Now that we have cleaned up within the columns, we will do another check to see 
 if there is any missing data, i.e., if anything became NA. If we did it 
@@ -252,8 +267,238 @@ colSums(is.na(cleanGenesData)) # RESULT: 0 for all columns which means that ther
 # no NAs present in our dataset.
 
 ```
-
 Great, there is no missing data in our cleaned dataset so our dataset is now ready 
 to be used for plotting.
+
+Now, that we have made our cleaned dataset, we can move to our next step which is 
+to create the function that will produce our plots (histogram, scatterplot, boxplot)
+for our 3 genes.
+
+Before, we make our plotting function, we will create our very own custom theme 
+that will be used for the plotting
+```{r}
+
+# STEP 14: Making the custom theme for the plots
+
+library(ggplot2)
+
+# Here to create my own custom theme, I am making a dark background theme with 
+# the axes and text in white. The legend is placed at the bottom. We will also 
+# remove all the extra border and grid lines to make it look cleaner.
+newBlackTheme <- theme( 
+  
+  # Remove all the extra borders and grid lines
+  panel.border = element_blank(),     # remove the borders 
+  panel.grid.major = element_blank(), # removes the major grid lines
+  panel.grid.minor = element_blank(), # removes the minor grid lines
+  
+  # Sets the axis color and text to white
+  axis.line = element_line(color="white"),               # sets axis line color to white
+  axis.text = element_text(colour = "white", size = 12), # sets axis text to white
+  axis.ticks = element_line(colour = "white"),           # sets axis tick to white
+  
+  # Sets plot background to black
+  plot.background = element_rect(fill = "black"), # this sets background color to black
+  panel.background = element_blank(),             # this removes the panel background
+
+  # This centers the plot title
+  plot.title = element_text(hjust = 0.5, size = 13),
+  
+  # Sets text color to white
+  text = element_text(colour = "white", size = 12),
+  
+  # Sets legend color as black
+  legend.key = element_rect(fill = "black"), # this sets legend key background to black
+  legend.background = element_rect(fill = "black"), # this sets legend background to black
+  
+  # Sets legend text color as white
+  legend.text = element_text(colour = "white", size = 12),
+  legend.title = element_text(colour = "white", size = 12),
+  
+  # Sets legend position to bottom
+  legend.position = "bottom")  
+
+```
+
+```{r}
+
+# STEP 15: Making the plotting function
+
+# Inputs:
+# df: cleaned dataset
+# genes: list of gene names
+# continuousCovariate: name of the continuous covariate
+# categoricalCovariates: names of the two categorical covariates
+
+makeGenePlots <- function(df, genes, continuousCovariate, categoricalCovariates){
+  
+  # Looping through each gene
+  for (gene in genes){
+    
+    # Creating a histogram for each selected gene
+    histPlot <- ggplot(df, aes(x = .data[[gene]])) + # we use .data[[gene]] so 
+      # that the function knows which column to use in the dataframe specified
+      # since our gene expression data is stored under its gene name, we just have
+      # to specify the gene
+      geom_histogram(bins = 20, fill = "darkgreen", color = "white") +
+      labs(title = paste("Distribution of", gene, "Expression"),
+           x = paste(gene, "Expression"),
+           y = "Number of Samples") +
+      newBlackTheme
+    
+    print(histPlot)
+    
+    # Creating a scatterplot for each selected gene [x = continuous covariate; 
+    # y = gene expression]
+    scatterPlot <- ggplot(df, aes(x = .data[[continuousCovariate]],
+                                  y = .data[[gene]])) +
+      geom_point(color = "#B2FBA5", size = 1.5, alpha = 0.6) +
+      labs(title = paste(gene, "Expression vs. Maternal Age"),
+           x = "Maternal Age (Years)",
+           y = paste(gene, "Expression")) +
+      newBlackTheme
+    
+    print(scatterPlot)
+    
+    # Creating a boxplot for each selected gene 
+    boxPlot <- ggplot(df, aes(x = .data[[categoricalCovariates[1]]],
+                              y = .data[[gene]], 
+                              color = .data[[categoricalCovariates[2]]])) +
+      geom_boxplot(fill = "black", width = 0.7,
+                   position = position_dodge(width = 0.85), # because jitter points 
+                   # are overlapping
+                   outlier.shape = NA) +
+      geom_jitter(position = position_jitterdodge(jitter.width = 0.15, 
+                                                  dodge.width = 0.85),
+                  alpha = 0.6, size = 1.5) +
+      scale_color_manual(values = c("#E5A9FF", "#00FF00")) +
+      labs(title = paste(gene, "Expression by Pregnancy Condition and Vitamin D Group"),
+           x = "Pregnancy Condition",
+           y = paste(gene, "Expression"),
+           color =" Vitamin D Group") +
+      newBlackTheme
+    
+    print(boxPlot)
+  }
+}
+
+```
+
+Let's now run this function:  
+
+The variables we will use for plotting are as follows:
+- Genes of Interest: NFYC, SOCS5, HAUS4 ("selectedGenes")
+- Continous Covariate: Maternal age ("mat_age_yrs")
+- First Categorical Covariate: Pregnancy condition ("preg_preeclampsia")
+- Second Categorical Covariate: Maternal Vitamin D group ("mat_vitD_group"; 
+                                                           from "mat_vitD")
+
+```{r}
+# STEP 16: Running the plotting function 
+
+makeGenePlots(df = cleanGenesData, 
+              genes = selectedGenes,
+              continuousCovariate = "mat_age_yrs",
+              categoricalCovariates = c("preg_preeclampsia", "mat_vitD_group"))
+
+```
+                                                    
+
+Now given that we have to present our plots on Monday, I have modified this 
+function a bit further so that the plots are more comparable for the different 
+genes specifically by setting the axes limits to be the same for the same type of
+plot across the different genes, so that means making sure the axes limits are
+the same for a histogram, etc.
+
+```{r}
+
+# Setting common axis limits across all three genes
+
+makeGenePlots <- function(df, genes, continuousCovariate, categoricalCovariates){
+  
+  # I am setting common axis limits across all three genes so that their plots 
+  # can be compared more easily and any differences we observe visually are not 
+  # exaggerated by differences in axis scales. We use range() to get both min. and
+  # max. values. We also use unlist() so that the 3 gene columns are combined into 
+  # one vector. Later on when plotting, we use coord_cartesian() so that the x/y 
+  # limits can be applied to our plots.
+  
+  expressionLimits <- range(unlist(df[genes]), na.rm = TRUE) # Finding min. and 
+  # and max. expression values across the 3 gene expression columns
+  
+  ageLimits <- range(df[[continuousCovariate]], na.rm = TRUE) # Finding min. and 
+  # max. values of maternal age (continuous covariate)
+  
+  # Looping through each gene
+  for (gene in genes){
+    
+    # Creating a histogram for each selected gene
+    histPlot <- ggplot(df, aes(x = .data[[gene]])) + # we use .data[[gene]] so 
+      # that the function knows which column to use in the dataframe specified
+      # since our gene expression data is stored under its gene name, we just have
+      # to specify the gene
+      geom_histogram(bins = 20, fill = "darkgreen", color = "white") +
+      labs(title = paste("Distribution of", gene, "Expression"),
+           x = paste(gene, "Expression"),
+           y = "Number of Samples") +
+      coord_cartesian(xlim = expressionLimits, ylim = c(0,30)) + # applying limits
+      # to both axes
+      newBlackTheme
+    
+    print(histPlot)
+    
+    # Creating a scatterplot for each selected gene [x = continuous covariate; 
+    # y = gene expression]...I have also added a line of best here
+    scatterPlot <- ggplot(df, aes(x = .data[[continuousCovariate]],
+                                  y = .data[[gene]])) +
+      geom_point(color = "#B2FBA5", size = 1.5, alpha = 0.6) +
+      
+      geom_smooth(method = "lm", se = TRUE, 
+                  color = "white", linewidth = 0.6) + # line of best fit, to better
+      # assess the relationship of the data for a scatterplot
+      
+      labs(title = paste(gene, "Expression vs. Maternal Age"),
+           x = "Maternal Age (Years)",
+           y = paste(gene, "Expression")) +
+      coord_cartesian(xlim = ageLimits, ylim = expressionLimits) + # applying 
+      # limits to both axes
+      newBlackTheme
+    
+    print(scatterPlot)
+    
+    # Creating a boxplot for each selected gene 
+    boxPlot <- ggplot(df, aes(x = .data[[categoricalCovariates[1]]],
+                              y = .data[[gene]], 
+                              color = .data[[categoricalCovariates[2]]])) +
+      geom_boxplot(fill = "black", width = 0.7,
+                   position = position_dodge(width = 0.85), # because jitter points 
+                   # are overlapping
+                   outlier.shape = NA) +
+      geom_jitter(position = position_jitterdodge(jitter.width = 0.15, 
+                                                  dodge.width = 0.85),
+                  alpha = 0.6, size = 1.5) +
+      scale_color_manual(values = c("#E5A9FF", "#00FF00")) +
+      labs(title = paste(gene, "Expression by Pregnancy Condition and Vitamin D Group"),
+           x = "Pregnancy Condition",
+           y = paste(gene, "Expression"),
+           color =" Vitamin D Group") +
+      coord_cartesian(ylim = expressionLimits) + # applying y axis limits
+      newBlackTheme
+    
+    print(boxPlot)
+  }
+}
+```
+
+Running the plotting function again with common axis limits
+```{r}
+makeGenePlots(df = cleanGenesData, 
+              genes = selectedGenes,
+              continuousCovariate = "mat_age_yrs",
+              categoricalCovariates = c("preg_preeclampsia", "mat_vitD_group"))
+
+```
+
+
 
 
