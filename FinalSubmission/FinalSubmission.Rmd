@@ -1,5 +1,5 @@
 ---
-title: "Gene Expression Analysis Submission 2"
+title: "HSE 103 Final Submission"
 author: "Ridah Shaista Shanavas"
 date: "2026-11-10"
 output:
@@ -12,7 +12,12 @@ RESOURCES:
 2. https://www.r-bloggers.com/2023/08/r-how-to-overlay-points-over-boxplots/
 3. https://bookdown.org/dli/rguide/scatterplots-and-best-fit-lines-single-set.html
 4. https://ggplot2.tidyverse.org/reference/lims.html 
-5. Utilizied AI for brainstorming and better understanding the concepts.
+5. https://www.rdocumentation.org/packages/tableone/versions/0.13.2/topics/CreateTabl
+eOne  
+6. https://www.rdocumentation.org/packages/tableone/versions/0.6.0/topics/print.Table
+One 
+7. Utilizied AI for brainstorming, better understanding concepts and to navigate
+errors.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -309,6 +314,7 @@ which we will choose to be a lollipop plot.
 
 ### Analysis
 
+### Nine Plots (3 genes x Histogram, Scatterplot, Boxplot )
 Before, we make our plotting function, we will create our very own custom theme 
 that will be used for the plotting
 ```{r}
@@ -358,6 +364,10 @@ newBlackTheme <- theme(
 ```{r}
 # STEP 13: Making the plotting function
 
+# Following the feedback I received from Submission 2 to italicize the gene names
+# I will use bquote to achieve this as this allows the italicization to be done
+# dynamically.
+
 # Inputs:
 # df: cleaned dataset
 # genes: list of gene names
@@ -390,8 +400,10 @@ makeGenePlots <- function(df, genes, continuousCovariate, categoricalCovariates)
       # since our gene expression data is stored under its gene name, we just have
       # to specify the gene
       geom_histogram(bins = 20, fill = "darkgreen", color = "white") +
-      labs(title = paste("Distribution of", gene, "Expression"),
-           x = paste(gene, "Expression"),
+      
+      # italicizing the gene names
+      labs(title = bquote("Distribution of" ~ italic(.(gene)) ~ "Expression"),
+           x = bquote(italic(.(gene)) ~ "Expression"),
            y = "Number of Samples") +
       coord_cartesian(xlim = expressionLimits, ylim = c(0,30)) + # applying limits
       # to both axes
@@ -409,9 +421,10 @@ makeGenePlots <- function(df, genes, continuousCovariate, categoricalCovariates)
                   color = "white", linewidth = 0.6) + # line of best fit, to better
       # assess the relationship of the data for a scatterplot
       
-      labs(title = paste(gene, "Expression vs. Maternal Age"),
+      # italicizing the gene names
+      labs(title = bquote(italic(.(gene)) ~ "Expression vs. Maternal Age"),
            x = "Maternal Age (Years)",
-           y = paste(gene, "Expression")) +
+           y = bquote(italic(.(gene)) ~ "Expression")) +
       coord_cartesian(xlim = ageLimits, ylim = expressionLimits) + # applying 
       # limits to both axes
       newBlackTheme
@@ -430,9 +443,12 @@ makeGenePlots <- function(df, genes, continuousCovariate, categoricalCovariates)
                                                   dodge.width = 0.85),
                   alpha = 0.6, size = 1.5) +
       scale_color_manual(values = c("#E5A9FF", "#00FF00")) +
-      labs(title = paste(gene, "Expression by Pregnancy Condition and Vitamin D Group"),
+      
+      # italicizing the gene names
+      labs(title = bquote(italic(.(gene)) ~ 
+                            "Expression by Pregnancy Condition and Vitamin D Group"),
            x = "Pregnancy Condition",
-           y = paste(gene, "Expression"),
+           y = bquote(italic(.(gene)) ~ "Expression"),
            color =" Vitamin D Group") +
       coord_cartesian(ylim = expressionLimits) + # applying y axis limits
       newBlackTheme
@@ -465,6 +481,7 @@ makeGenePlots(df = cleanGenesData,
 Now, that we have generated the 9 plots like we did in Submission 2, we will now
 focus on making our summary statistics table.
 
+### Summary Statistics Table 
 For our summary statistics table, we want to do it for 3 continuous covariates 
 and 2 categorical covariates, stratified by a categorical covariate. As mentioned
 earlier, we will stratify the table using the categorical covariate, pregnancy
@@ -481,7 +498,315 @@ So to summarize, the covariates we will choose for our table is as follows:
 - Second Categorical Covariate: Maternal Vitamin D group ("mat_vitD_group"; 
                                                            from "mat_vitD")
                                                           
+In order to make our summary statistics table, we will use the function called
+CreateTableOne() from the R package tableone.
 
+```{r}
+# STEP 15: Building our summary statistics table
+```
+
+```{r}
+# Step 15a: Checking the distributions of our continuous covariates (to decide
+# what stats we want to use, i.e., eiher Mean(SD) if its normally distributed 
+# OR Median [IQR] if its non-normally distributed)
+
+# Maternal Age 
+# ggplot(cleanGenesData, aes(x = mat_age_yrs)) +
+#   geom_histogram(bins = 20, fill = "darkgreen", color = "white") +
+#   labs(title = "Distribution of Maternal Age",
+#        x = "Maternal Age (years)",
+#        y = "Number of Samples") +
+#   newBlackTheme
+# RESULT: Sort of symmetric, so Mean(SD)
+
+
+# Maternal BMI 
+# ggplot(cleanGenesData, aes(x = mat_BMI)) +
+#   geom_histogram(bins = 20, fill = "darkgreen", color = "white") +
+#   labs(title = "Distribution of Maternal BMI",
+#        x = "Maternal BMI (kg/m2)",
+#        y = "Number of Samples") +
+#   newBlackTheme 
+# RESULT: Right skewed, so Median(IQR)
+
+
+# Gestational Age at Delivery
+# ggplot(cleanGenesData, aes(x = delivery_gestAge_wks)) +
+#   geom_histogram(bins = 20, fill = "darkgreen", color = "white") +
+#   labs(title = "Distribution of Gestational Age at Delivery",
+#        x = "Gestational Age at Delivery (weeks)",
+#        y = "Number of Samples") +
+#   newBlackTheme 
+# RESULT: Left skewed, so Median(IQR)
+
+```
+
+```{r}
+
+# Step 15b: Creating the base stats table
+
+# Installing and Loading in the package
+#install.packages("tableone")
+library(tableone)
+
+# Selecting the variables for the table
+tableVars <- c("mat_age_yrs", "mat_BMI", 
+               "delivery_gestAge_wks", "mat_vitD_group")
+
+# Creating the table (note that we are stratifying by pregnancy condition and 
+# so we use strata to accomplish this)
+tableOne <- CreateTableOne(vars = tableVars,
+                           strata = "preg_preeclampsia",
+                           data = cleanGenesData,
+                           test = FALSE)
+
+# Displaying the table; we set ShowAllLevels so we can the complete table, i.e.,
+# so that we can also see the stats for the two different groups for Vitamin D.
+# print(tableOne, showAllLevels = TRUE) # looks good!
+
+```
+
+```{r}
+# Step 15c: Preparing the table results for latex formatting
+
+# When formatting our table, we will use kable(), which expects either a matrix 
+# or a dataframe. the tableOne we created above using CreateTableOne is neither 
+# of these and hence, we need to store these tableOne values as a matrix. We can
+# do this by printing the results, setting printToggle to False and saving it in 
+# a new variable.
+
+# Also since maternal BMI and gestational age at delivery are skewed, we will 
+# report their median and IQR instead of mean and SD. Maternal age appears
+# approximately symmetric, so we will report its mean and SD. We report these 
+# non-normal situation stats using the nonormal argument.
+
+tableOneResults <- print(tableOne, showAllLevels = TRUE,
+                         nonnormal = c("mat_BMI", "delivery_gestAge_wks"),
+                         test = FALSE, noSpaces = TRUE, 
+                         printToggle = FALSE)
+
+# Here, again we set showAllLevels to TRUE so that both vitamin D groups are shown,
+# while setting test to FALSE so that we are only displaying descriptive statistics
+# without conducting statistical tests. We set noSpaces to TRUE so that it removes 
+# extra spacing from the table output and just helps to make it looker cleaner.
+
+#head(tableOneResults) # looks good!
+
+```
+
+```{r}
+# Step 15d: Formatting the labels so that they are easier to read
+
+# Checking the current row labels
+#rownames(tableOneResults)
+
+# Replacing the row labels
+rownames(tableOneResults) <- c("Sample Size, N", 
+                               "Maternal Age (years), Mean (SD)",
+                               "Maternal BMI (kg/m2), Median [IQR]",
+                               "Gestational Age at Delivery (weeks), Median [IQR]",
+                               "Maternal Vitamin D Group, N (%)",
+                               "")
+
+# Viewing the updated table
+#head(tableOneResults) # much better
+
+```
+
+```{r}
+# Step 15e: Formatting the table so it looks nicer and cleaner (latex formatted)
+
+# Loading the packages for the formatting of the table
+library(knitr)
+library(kableExtra)
+
+# We will now format the table using kable().
+kable(x = tableOneResults,
+      format = "latex", # since our final table needs to be LaTeX formatted
+      caption = "Maternal Characteristics Stratified by Pregnancy Condition",
+      col.names = c("Category", "Normal", "Preeclampsia"),
+      align = c("l", "l", "l", "l")) %>% # here we are left-aligning everything
+  kable_classic() # looks good; we can set format to html to view it here.
+
+```
+Now, that we have created our summary statistics table, we can move on to the next
+section of our project which is to create a heatmap for the 10 genes that we
+selected.
+
+### Heatmap (10 genes, tracking bars for 2 categorical variables, clustering)
+
+Our heatmap will consist of the following:
+- Rows: the 10 genes selected (selectedGenes)
+- Columns: the 157 maternal blood samples
+- 2 tracking bars: Pregnancy condition and Maternal Vitamin D group.
+- Clustering: Grouping samples and genes with similar expression patterns.
+
+```{r}
+# STEP 16: Creating our heatmap
+
+# Step 16a: Preparing the gene expression matrix
+
+# Selecting the expression values for our 10 genes
+heatMapData <- cleanGenesData[, selectedGenes]
+
+# Taking a look at the data 
+#head(heatMapData) # Looks good!
+
+# Setting the sample IDs as row names
+rownames(heatMapData) <- cleanGenesData$geoID
+
+# Converting our data into a matrix
+heatMapData <- as.matrix(heatMapData)
+
+# Transposing the matrix since we want genes as rows and samples as columns
+heatMapData <- t(heatMapData)
+
+# Checking the dimensions of our matrix (We expect: 10 x 157)
+dim(heatMapData) # Results: 10 x 157!
+
+# Taking a look at our data again
+#head(heatMapData) # Looks good!
+```
+
+```{r}
+# Step 16b: Making our tracking bars
+
+# Creating an annotation dataset containing our two categorical covariates which 
+# we will be using for our tracking bars.
+annotationData <- data.frame(row.names = cleanGenesData$geoID,
+                             Pregnancy = cleanGenesData$preg_preeclampsia,
+                             "Vitamin D" = cleanGenesData$mat_vitD_group,
+                             check.names = FALSE) # so that a period is not added
+                             # for any spaces in any column name
+
+
+# Making pregnancy condition a factor
+annotationData$Pregnancy <- factor(annotationData$Pregnancy)
+
+# Taking a look at our annotation dataset
+#head(annotationData) # looks good!
+
+# Choosing the colors for our two tracking bars
+annotationColors <- list(Pregnancy = c("Normal" = "#B2FBA5",
+                                       "Preeclampsia" = "#E5A9FF"),
+                         "Vitamin D" = c("Below 20 ng/mL" = "#006D77",
+                                         "20 ng/mL or above" = "grey"))
+
+```
+
+```{r}
+# Step 16c: Generating our heatmap
+
+# Installing and loading the pheatmap package
+#install.packages("pheatmap")
+library(pheatmap)
+
+# Before generating the heatmap, we will also italicize our gene names in response
+# to the feedback from Submission 2
+italicGeneNames <- parse(text = paste0("italic(", rownames(heatMapData), ")"))
+# Here, paste0() creates an italic() expression for each gene name and then
+# parse converts this into something that R can use for formatting which in our 
+# case is italicizing. 
+
+# Generating our heatmap with clustering and tracking bars
+pheatmap(heatMapData,
+         scale = "row", # standardizes each gene so that we can compare expression 
+                        # across genes.
+         clustering_distance_cols = "euclidean", 
+         clustering_distance_rows = "euclidean", 
+         annotation_col = annotationData,
+         annotation_colors = annotationColors,
+         labels_row = italicGeneNames,
+         show_colnames = FALSE, # we don't need to see the sample ids as we are 
+                                # more interested in gene expression patterns
+         main = "Gene Expression Heatmap")
+```
+
+Now, that we have created our heatmap, we can move on to the final section of
+our project which is to use a plot type we have not explored in class to 
+visualize our data. The plot type I have selected is a lollipop plot.
+
+### Lollipop Plot 
+A lollipop plot will allow us to compare values across different categories using
+points connected to a reference line (called lollipop plot since the dots and lines
+come together and resemble lollipops!).
+
+For our lollipop plot, we will use the 10 genes we selected earlier and look at 
+the difference in their mean expression levels between Normal and Preeclampsia 
+pregnancies. This will allow us to see which genes have relatively higher or lower average expression in the Preeclampsia group compared to the Normal group.
+
+We will begin by calculating the mean expression for each gene within the two pregnancy groups and then find the difference between these means.
+
+```{r}
+# STEP 17: Creating our lollipop plot
+
+# Step 17a: Preparing our data for the lollipop plot
+
+# First, selecting our 10 genes along with pregnancy condition
+lollipopData <- cleanGenesData[, c("preg_preeclampsia", selectedGenes)]
+
+# Reshaping from wide to long format so that we have one column for the gene 
+# names and another for the expression values
+lollipopData <- lollipopData %>%
+  pivot_longer(cols = -preg_preeclampsia,
+               names_to = "GENE",
+               values_to = "Expression") %>%
+
+  # Grouping by gene and pregnancy condition so that we can calculate the
+  # mean gene expression value separately for Normal and Preeclampsia
+  group_by(GENE, preg_preeclampsia) %>%
+  summarise(meanExpression = mean(Expression, na.rm = TRUE),
+            .groups = "drop") %>%
+
+  # Reshaping back to wide format so that each pregnancy group has its own column
+  pivot_wider(names_from = preg_preeclampsia,
+              values_from = meanExpression) %>%
+
+  # Calculating the difference in mean gene expression value between the two groups
+  mutate(meanDifference = Preeclampsia - Normal)
+
+# Taking a look at our data
+#lollipopData # Looks good!
+
+```
+
+```{r}
+# Step 17b: Generating our lollipop plot
+
+lollipopPlot <- ggplot(lollipopData, 
+                       aes(x = meanDifference,
+                           y = reorder(GENE, meanDifference))) + 
+                          # we use reorder to arrange the genes by their mean
+                          # difference (biggest to smallest)
+  
+  # Here we are drawing a line from 0 to the mean difference value for each gene.
+  # so we start from the reference point which is x = 0 (meaning no difference)
+  # and then xend is where the line will end and it corresponds to the mean 
+  # difference for that gene.
+  geom_segment(aes(x = 0, xend = meanDifference),
+                 color = "white", linewidth = 0.7) +
+  
+  # Italicizing our gene names which are on the y-axis. Here function(y) works 
+  # by taking each gene name label (y) and then using parse + paste0 to italicize 
+  # it
+  scale_y_discrete(labels = function(y) parse(text = paste0("italic(", y, ")"))) +
+
+  # Adding points at the end of each line
+  geom_point(color = "#B2FBA5", size = 3) +
+  
+  # Adding a reference line at zero
+  geom_vline(xintercept = 0, 
+             linetype = "dashed",
+             color = "grey") +
+  
+  labs(title = "Difference in Mean Gene Expression by Pregnancy Condition",
+       x = "Mean Expression Difference (Preeclampsia - Normal)",         
+       y = "Gene") +
+  
+  newBlackTheme
+
+lollipopPlot
+```
 
 
 
